@@ -293,6 +293,7 @@ label { display: block; font-size: 13px; font-weight: 600; color: var(--tinta-2)
 .entrada input:focus { outline: 2px solid var(--bosque-3); outline-offset: -1px; }
 .entrada .btn { width: 100%; height: 42px; justify-content: center; margin-top: 16px; font-size: 14px; }
 .pista { font-size: 12.5px; color: var(--tinta-3); margin-top: 6px; }
+.mensaje-ok { background: var(--bien-fondo); color: var(--bien); border-radius: 6px; padding: 9px 12px; margin-top: 14px; }
 .mensaje-error { background: var(--grave-fondo); color: var(--grave); border-radius: 6px; padding: 9px 12px; margin-top: 14px; }
 pre.sql { background: var(--hoja-2); border: 1px solid var(--linea); padding: 12px; border-radius: 6px; font-size: 12px; overflow: auto; }
 
@@ -352,10 +353,14 @@ const temaEfectivo = () => {
 // Conexión — en ?demo, un cliente de mentira con datos de ejemplo.
 // ============================================================================
 const DEMO = new URLSearchParams(location.search).has('demo');
-const CLAVE_CONFIG = 'mimotoya.consola.config';
-const leerConfig = () => { try { return JSON.parse(localStorage.getItem(CLAVE_CONFIG) ?? 'null'); } catch { return null; } };
-const guardarConfig = (c) => { try { localStorage.setItem(CLAVE_CONFIG, JSON.stringify(c)); } catch {} };
-const borrarConfig = () => { try { localStorage.removeItem(CLAVE_CONFIG); } catch {} };
+// Proyecto de Supabase. La llave anon es pública por diseño (es la misma que
+// lleva la app en cada celular): no da acceso a nada por sí sola. Lo que
+// protege los datos es que cada función de la base exige is_operador().
+// La llave service_role NUNCA va aquí.
+const SUPABASE_URL = 'https://zqudigozwvmvkujfqcqd.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdWRpZ296d3Ztdmt1amZxY3FkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxNzM0NjYsImV4cCI6MjEwMDc0OTQ2Nn0.-MFB0AmpXoqp8sWqDDdgI7QrrfEfozztwZiPu54dTC8';
+// La versión anterior guardaba URL y llave en el navegador; ya no hace falta.
+try { localStorage.removeItem('mimotoya.consola.config'); } catch {}
 
 let sb = null;
 const estado = { perfil: null, pestana: 'conductores' };
@@ -412,9 +417,14 @@ function textoError(e) {
   if (!e) return 'Algo salió mal.';
   if (e.details) return e.details;
   const m = String(e.message ?? e);
+  const ml = m.toLowerCase();
   if (m === 'NO_AUTORIZADO') return 'Tu cuenta no es de operador. Pide que te agreguen a la tabla operador.';
-  if (m.includes('Failed to fetch')) return 'No hay conexión con Supabase. Revisa la URL del proyecto o tu internet.';
-  if (m.toLowerCase().includes('invalid api key')) return 'La llave anon no es correcta.';
+  if (ml.includes('invalid login credentials')) return 'Correo o contraseña incorrectos.';
+  if (ml.includes('email not confirmed')) return 'Ese correo todavía no está confirmado. En Supabase: Authentication, Users, y confirmarlo.';
+  if (ml.includes('rate limit') || ml.includes('security purposes')) return 'Ya se envió un correo hace poco. Espera unos minutos y vuelve a intentar.';
+  if (ml.includes('should be different')) return 'La contraseña nueva tiene que ser distinta a la anterior.';
+  if (ml.includes('password should be at least')) return 'La contraseña debe tener al menos 8 caracteres.';
+  if (m.includes('Failed to fetch')) return 'No hay conexión. Revisa el internet de este computador.';
   if (m.includes('op_acumulado') && m.toLowerCase().includes('function')) return 'Falta aplicar la migración 0062 en la base de datos (npx supabase db push).';
   return m;
 }
@@ -426,7 +436,7 @@ async function rpc(nombre, args = {}) {
 }
 
 // ============================================================================
-// Entrada: conectar el proyecto y luego el teléfono
+// Entrada: correo y contraseña (y recuperar la contraseña por correo)
 // ============================================================================
 function ladoMarca() {
   return `<div class="lado">
@@ -439,70 +449,67 @@ function ladoMarca() {
   </div>`;
 }
 
-function pintarConfiguracion(error) {
-  const c = leerConfig() ?? { url: '', anon: '' };
-  raiz.innerHTML = `<div class="entrada">${ladoMarca()}
-    <div class="formulario"><form id="f">
-      <h1>Conectar la central</h1>
-      <p class="intro">Se hace una sola vez en este computador. Los datos quedan guardados aquí y en ningún otro lado.</p>
-      <label for="url">URL del proyecto de Supabase</label>
-      <input id="url" type="url" required placeholder="https://xxxxxxxx.supabase.co" value="${esc(c.url)}" />
-      <label for="anon">Llave pública (anon)</label>
-      <input id="anon" type="text" required placeholder="eyJhbGciOi…" value="${esc(c.anon)}" />
-      <p class="pista">Están en Supabase, Project Settings, API. Nunca pegues aquí la llave service_role.</p>
-      <button class="btn fuerte" type="submit">Conectar</button>
-      ${error ? `<div class="mensaje-error">${esc(error)}</div>` : ''}
-    </form></div></div>`;
-  document.getElementById('f').onsubmit = (ev) => {
-    ev.preventDefault();
-    guardarConfig({
-      url: document.getElementById('url').value.trim().replace(/\/+$/, ''),
-      anon: document.getElementById('anon').value.trim(),
-    });
-    arrancar();
+function pintarEntrada(modo = 'entrar', error = '', aviso = '') {
+  const titulos = { entrar: 'Entrar a la central', olvido: 'Recuperar la contraseña', nueva: 'Escribe tu contraseña nueva' };
+  const intros = {
+    entrar: 'Con el correo y la contraseña de la central.',
+    olvido: 'Te mandamos un enlace al correo para poner una contraseña nueva.',
+    nueva: 'Mínimo 8 caracteres. La vas a usar desde ahora para entrar.',
   };
-}
-
-function pintarEntrada(paso = 'telefono', datos = {}, error = '') {
+  const campos = {
+    entrar: `<label for="correo">Correo</label>
+      <input id="correo" type="email" required autocomplete="username" placeholder="operacion@mochipas.co" />
+      <label for="clave">Contraseña</label>
+      <input id="clave" type="password" required autocomplete="current-password" />`,
+    olvido: `<label for="correo">Correo</label>
+      <input id="correo" type="email" required autocomplete="username" />`,
+    nueva: `<label for="clave">Contraseña nueva</label>
+      <input id="clave" type="password" required minlength="8" autocomplete="new-password" />
+      <label for="clave2">Repítela</label>
+      <input id="clave2" type="password" required minlength="8" autocomplete="new-password" />`,
+  };
+  const botones = { entrar: 'Entrar', olvido: 'Enviarme el enlace', nueva: 'Guardar y entrar' };
   raiz.innerHTML = `<div class="entrada">${ladoMarca()}
     <div class="formulario"><form id="f">
-      <h1>${paso === 'telefono' ? 'Entrar a la central' : 'Escribe el código'}</h1>
-      <p class="intro">${paso === 'telefono'
-        ? 'Con el mismo celular con el que entras a la app.'
-        : `Llegó por mensaje al ${esc(telefonoLegible(datos.telefono))}.`}</p>
-      ${paso === 'telefono'
-        ? `<label for="tel">Celular</label>
-           <input id="tel" type="tel" required inputmode="numeric" maxlength="10" placeholder="300 123 4567" value="${esc(datos.telefono ?? '')}" />`
-        : `<label for="cod">Código de 6 números</label>
-           <input id="cod" type="text" required inputmode="numeric" maxlength="6" autofocus />`}
-      <button class="btn fuerte" type="submit">${paso === 'telefono' ? 'Enviarme el código' : 'Entrar'}</button>
-      ${paso === 'codigo' ? '<button class="btn" type="button" id="atras">Usar otro número</button>' : ''}
+      <h1>${titulos[modo]}</h1>
+      <p class="intro">${intros[modo]}</p>
+      ${campos[modo]}
+      <button class="btn fuerte" type="submit">${botones[modo]}</button>
+      ${aviso ? `<div class="mensaje-ok">${esc(aviso)}</div>` : ''}
       ${error ? `<div class="mensaje-error">${esc(error)}</div>` : ''}
-      <p class="pista" style="margin-top:22px"><a href="#" id="cambiar-proyecto">Conectar con otro proyecto</a></p>
+      ${modo === 'entrar' ? '<p class="pista" style="margin-top:22px"><a href="#" id="olvido">Olvidé mi contraseña</a></p>' : ''}
+      ${modo === 'olvido' ? '<p class="pista" style="margin-top:22px"><a href="#" id="volver">Volver a entrar</a></p>' : ''}
     </form></div></div>`;
-  document.getElementById('cambiar-proyecto').onclick = (ev) => { ev.preventDefault(); borrarConfig(); pintarConfiguracion(); };
-  const atras = document.getElementById('atras');
-  if (atras) atras.onclick = () => pintarEntrada('telefono', datos);
+  const olvido = document.getElementById('olvido');
+  if (olvido) olvido.onclick = (ev) => { ev.preventDefault(); pintarEntrada('olvido'); };
+  const volver = document.getElementById('volver');
+  if (volver) volver.onclick = (ev) => { ev.preventDefault(); pintarEntrada('entrar'); };
+  (document.getElementById('correo') ?? document.getElementById('clave')).focus();
+
   document.getElementById('f').onsubmit = async (ev) => {
     ev.preventDefault();
     const boton = ev.target.querySelector('button[type=submit]');
     boton.disabled = true;
+    const correo = document.getElementById('correo')?.value.trim().toLowerCase();
+    const clave = document.getElementById('clave')?.value;
     try {
-      if (paso === 'telefono') {
-        const tel = document.getElementById('tel').value.replace(/\D/g, '');
-        if (tel.length !== 10) throw new Error('El número debe tener 10 dígitos.');
-        const { error } = await sb.auth.signInWithOtp({ phone: '+57' + tel });
+      if (modo === 'entrar') {
+        const { error } = await sb.auth.signInWithPassword({ email: correo, password: clave });
         if (error) throw error;
-        pintarEntrada('codigo', { telefono: tel });
+        await arrancarSesion();
+      } else if (modo === 'olvido') {
+        const { error } = await sb.auth.resetPasswordForEmail(correo, { redirectTo: location.origin + location.pathname });
+        if (error) throw error;
+        pintarEntrada('entrar', '', 'Si ese correo es de la central, te llegó un enlace. Ábrelo en este computador.');
       } else {
-        const cod = document.getElementById('cod').value.replace(/\D/g, '');
-        const { error } = await sb.auth.verifyOtp({ phone: '+57' + datos.telefono, token: cod, type: 'sms' });
+        if (clave !== document.getElementById('clave2').value) throw new Error('Las dos contraseñas no coinciden.');
+        const { error } = await sb.auth.updateUser({ password: clave });
         if (error) throw error;
         await arrancarSesion();
       }
     } catch (e) {
       boton.disabled = false;
-      pintarEntrada(paso, datos, textoError(e));
+      pintarEntrada(modo, textoError(e));
     }
   };
 }
@@ -960,21 +967,22 @@ setInterval(() => {
 // ============================================================================
 async function arrancarSesion() {
   raiz.innerHTML = '<div class="cargando" style="padding:40px">Entrando…</div>';
-  let perfil;
-  try { perfil = await rpc('mi_perfil'); }
-  catch (e) { return pintarEntrada('telefono', {}, textoError(e)); }
-
-  if (!perfil?.es_operador) {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return pintarEntrada('entrar');
+  try {
+    await rpc('op_metricas');  // solo responde a operadores
+  } catch (e) {
+    if (String(e.message) !== 'NO_AUTORIZADO') return pintarEntrada('entrar', textoError(e));
     raiz.innerHTML = `<div class="entrada">${ladoMarca()}<div class="formulario"><div style="max-width:440px">
       <h1>Esta cuenta no es de la central</h1>
-      <p class="intro">El número entró bien, pero no tiene permiso de operación. Alguien con acceso a la base de datos tiene que correr esto:</p>
+      <p class="intro">${esc(user.email ?? 'La cuenta')} entró bien, pero no tiene permiso de operación. Alguien con acceso a la base de datos tiene que correr esto en Supabase, SQL Editor:</p>
       <pre class="sql">insert into operador (usuario_id, nombre)
-values ('${esc(perfil?.id ?? 'tu-uuid')}', '${esc(perfil?.nombre ?? 'Tu nombre')}');</pre>
+values ('${esc(user.id)}', '${esc(user.email ?? 'Operador')}');</pre>
       <button class="btn" id="salir2">Salir</button></div></div></div>`;
     document.getElementById('salir2').onclick = async () => { await sb.auth.signOut(); location.reload(); };
     return;
   }
-  estado.perfil = perfil;
+  estado.perfil = { id: user.id, nombre: user.user_metadata?.nombre ?? user.email };
   await refrescarTodo();
   setInterval(() => {
     if (!document.hidden && (estado.pestana === 'viajes' || estado.pestana === 'seguridad' || (estado.pestana === 'caja' && caja.rango === 'hoy'))) {
@@ -985,14 +993,23 @@ values ('${esc(perfil?.id ?? 'tu-uuid')}', '${esc(perfil?.nombre ?? 'Tu nombre')
 
 async function arrancar() {
   if (DEMO) { sb = clienteDemo(); estado.perfil = { nombre: 'Demo' }; return refrescarTodo(); }
-  const config = leerConfig();
-  if (!config?.url || !config?.anon) return pintarConfiguracion();
+  // El enlace de "Olvidé mi contraseña" vuelve aquí con #...type=recovery.
+  const vieneDeRecuperar = /type=recovery/.test(location.hash);
   try {
     const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
-    sb = createClient(config.url, config.anon, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
-  } catch (e) { return pintarConfiguracion(textoError(e)); }
-  const { data } = await sb.auth.getSession();
-  if (data.session) await arrancarSesion(); else pintarEntrada();
+    sb = createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  } catch (e) {
+    raiz.innerHTML = `<div class="cargando" style="padding:40px">No se pudo cargar la central. Revisa el internet y recarga la página.</div>`;
+    return;
+  }
+  const { data, error } = await sb.auth.getSession();
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  if (vieneDeRecuperar) {
+    if (data.session) return pintarEntrada('nueva');
+    return pintarEntrada('olvido', 'El enlace ya venció o ya se usó. Pide uno nuevo.');
+  }
+  if (error) return pintarEntrada('entrar', textoError(error));
+  if (data.session) await arrancarSesion(); else pintarEntrada('entrar');
 }
 
 // ============================================================================
