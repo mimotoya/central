@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2310302A'/%3E%3Crect x='7' y='11' width='18' height='10' rx='2' fill='%23F2C200'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
 /* ===========================================================================
    MiMotoYa — Central de operación (rediseño 27-oct-2026)
@@ -18,8 +18,8 @@
      lateral. Las pestañas son carpetas que se pegan al papel de abajo.
    · Cada conductor se reconoce por su placa amarilla de servicio público y
      su número de móvil, como en la calle. El amarillo es SOLO para placas.
-   · Cifras en Barlow Semi Condensed (tabulares); todo lo demás en Schibsted
-     Grotesk.
+   · Cifras en Barlow Semi Condensed (tabulares); todo lo demás en Poppins,
+     la letra de la app. El "Ya" de la marca va en verde claro.
    · Los estados nunca van solo con color: siempre llevan marca y palabra.
 
    Modo oscuro: sigue al sistema; el botón de la banda lo fija en claro u
@@ -93,7 +93,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
-  font-family: "Schibsted Grotesk", system-ui, sans-serif;
+  font-family: "Poppins", system-ui, sans-serif;
   font-size: 14px; line-height: 1.45;
   background: var(--papel); color: var(--tinta);
   -webkit-font-smoothing: antialiased;
@@ -105,7 +105,7 @@ a { color: var(--enlace); text-underline-offset: 2px; }
 :focus-visible { outline: 2px solid var(--placa); outline-offset: 2px; }
 .ico { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
        stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.cifra-fuente { font-family: "Barlow Semi Condensed", "Schibsted Grotesk", sans-serif; font-variant-numeric: tabular-nums; }
+.cifra-fuente { font-family: "Barlow Semi Condensed", "Poppins", sans-serif; font-variant-numeric: tabular-nums; }
 
 /* --- Banda de mando ------------------------------------------------------ */
 .banda { background: var(--bosque); color: var(--sobre-bosque); }
@@ -114,8 +114,8 @@ a { color: var(--enlace); text-underline-offset: 2px; }
   padding: 0 24px; height: 56px; max-width: 1480px; margin: 0 auto;
 }
 .marca { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
-.marca b { font-size: 18px; font-weight: 800; letter-spacing: -0.03em; color: #fff; }
-.marca b span { color: var(--placa); }
+.marca b { font-size: 18px; font-weight: 700; letter-spacing: -0.03em; color: #fff; }
+.marca b span { color: #5FD3A3; }
 .marca small { font-size: 12.5px; color: var(--sobre-bosque-2); font-weight: 500; }
 .nav { display: flex; align-self: stretch; gap: 2px; margin-left: 12px; overflow-x: auto; scrollbar-width: none; }
 .nav::-webkit-scrollbar { display: none; }
@@ -165,7 +165,7 @@ a { color: var(--enlace); text-underline-offset: 2px; }
 /* --- Hoja de trabajo ----------------------------------------------------- */
 main { max-width: 1480px; margin: 0 auto; padding: 22px 24px 40px; }
 .cabeza { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
-.cabeza h1 { font-size: 26px; font-weight: 800; line-height: 1.1; }
+.cabeza h1 { font-size: 26px; font-weight: 700; line-height: 1.1; }
 .cabeza p { margin: 4px 0 0; color: var(--tinta-2); max-width: 78ch; }
 .cabeza .crece { flex: 1; min-width: 240px; }
 
@@ -282,11 +282,11 @@ tr.elegido td { background: var(--hoja-2); box-shadow: inset 3px 0 0 var(--bosqu
 /* --- Entrada ------------------------------------------------------------- */
 .entrada { min-height: 100vh; display: grid; grid-template-columns: 1.1fr 1fr; }
 .entrada .lado { background: var(--bosque); color: var(--sobre-bosque); padding: 48px; display: flex; flex-direction: column; justify-content: space-between; }
-.entrada .lado h2 { font-size: 40px; font-weight: 800; color: #fff; line-height: 1.05; max-width: 14ch; letter-spacing: -0.03em; }
+.entrada .lado h2 { font-size: 40px; font-weight: 700; color: #fff; line-height: 1.05; max-width: 14ch; letter-spacing: -0.03em; }
 .entrada .lado p { color: var(--sobre-bosque-2); max-width: 44ch; }
 .entrada .formulario { display: grid; place-items: center; padding: 32px; }
 .entrada form { width: 100%; max-width: 360px; }
-.entrada h1 { font-size: 24px; font-weight: 800; }
+.entrada h1 { font-size: 24px; font-weight: 700; }
 .entrada .intro { color: var(--tinta-2); margin: 6px 0 18px; }
 label { display: block; font-size: 13px; font-weight: 600; color: var(--tinta-2); margin: 14px 0 5px; }
 .entrada input { width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--linea); border-radius: 6px; background: var(--hoja); }
