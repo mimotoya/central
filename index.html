@@ -519,6 +519,7 @@ function pintarEntrada(modo = 'entrar', error = '', aviso = '') {
 // ============================================================================
 const PESTANAS = [
   { id: 'conductores', titulo: 'Conductores' },
+  { id: 'lista',       titulo: 'Lista oficial' },
   { id: 'viajes',      titulo: 'En la calle' },
   { id: 'caja',        titulo: 'Caja' },
   { id: 'seguridad',   titulo: 'Seguridad' },
@@ -647,6 +648,99 @@ async function hojaConductores() {
       </tr>`;
     }).join('')}</tbody></table></div>
     <div class="pie-tabla"><span>${plural(lista.length, 'conductor', 'conductores')} en esta lista</span><span>Primero los conectados; después, los que más han hecho hoy.</span></div></div>`;
+}
+
+// ============================================================================
+// Lista oficial (padrón de la asociación) — 0065, 18-nov-2026
+//
+// Solo puede registrarse como conductor quien está aquí. Agregar a alguien lo
+// deja registrarse (y queda aprobado solo); sacarlo le corta los viajes en el
+// acto. Corregir el celular lo vincula con la cuenta que ya tenga.
+// ============================================================================
+let filtroLista = 'activos';
+let busquedaLista = '';
+let editandoLista = null;   // null, 'nuevo' o el id de la fila
+let cacheLista = [];
+let cacheMunicipiosLista = [];
+
+function estadoEnApp(f) {
+  if (!f.activo) return '<span class="estado neutro">Fuera de la lista</span>';
+  if (!f.registrado) return '<span class="estado aviso">No se ha registrado</span>';
+  if (f.estado_app === 'verificado') return `<span class="estado bien">Registrado</span>${f.conectado ? ' <span class="conectado">Conectado</span>' : ''}`;
+  if (f.estado_app === 'rechazado') return '<span class="estado grave">Rechazado</span>';
+  return '<span class="estado aviso">Por revisar</span>';
+}
+
+function formularioLista() {
+  const f = editandoLista === 'nuevo' ? { es_reemplazo: false } : (cacheLista.find((x) => x.id === editandoLista) ?? {});
+  const munis = cacheMunicipiosLista;
+  const muniSel = f.municipio_id ?? (munis.find((m) => m.activo) ?? munis[0])?.id ?? '';
+  const campo = (id, etiqueta, valor, extra = '') => `<label style="display:grid;gap:4px;font-size:13px;font-weight:600">${etiqueta}
+    <input class="campo" id="lf-${id}" value="${esc(valor ?? '')}" ${extra} /></label>`;
+  return `<div class="marco" style="margin-bottom:14px;padding:18px">
+    <h3 style="margin:0 0 4px">${editandoLista === 'nuevo' ? 'Agregar conductor a la lista' : 'Corregir datos'}</h3>
+    <p class="sub" style="margin:0 0 14px">${editandoLista === 'nuevo'
+      ? 'Desde que lo guardes, esa persona puede registrarse en la app con ese celular y queda aprobada sola.'
+      : 'Si corriges el celular, la lista se conecta con la cuenta que ya tenga registrada con ese número.'}</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+      ${campo('nombre', 'Nombres', f.nombre, 'autocomplete="off"')}
+      ${campo('apellido', 'Apellidos', f.apellido, 'autocomplete="off"')}
+      ${campo('cedula', 'Cédula', f.cedula, 'inputmode="numeric" autocomplete="off"')}
+      ${campo('telefono', 'Celular (10 dígitos)', f.telefono ? String(f.telefono).replace(/^\+57/, '') : '', 'inputmode="tel" autocomplete="off"')}
+      ${campo('placa', 'Placa', f.placa, 'autocomplete="off" style="text-transform:uppercase"')}
+      ${campo('movil', 'Número de móvil', f.numero_movil, 'inputmode="numeric" autocomplete="off"')}
+      ${munis.length > 1 ? `<label style="display:grid;gap:4px;font-size:13px;font-weight:600">Municipio
+        <select class="campo" id="lf-municipio">${munis.map((m) => `<option value="${m.id}" ${m.id === muniSel ? 'selected' : ''}>${esc(m.nombre)}</option>`).join('')}</select></label>`
+        : `<input type="hidden" id="lf-municipio" value="${esc(muniSel)}" />`}
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;font-weight:600;align-self:end;padding-bottom:8px">
+        <input type="checkbox" id="lf-reemplazo" ${f.es_reemplazo ? 'checked' : ''} /> Es reemplazo (sin móvil propio)</label>
+    </div>
+    <div class="error" id="lf-error" style="padding:10px 0 0;display:none"></div>
+    <div class="acciones" style="margin-top:14px">
+      <button class="btn fuerte" id="lf-guardar">${editandoLista === 'nuevo' ? 'Agregar a la lista' : 'Guardar cambios'}</button>
+      <button class="btn" id="lf-cancelar">Cancelar</button>
+    </div></div>`;
+}
+
+async function hojaLista() {
+  [cacheLista, cacheMunicipiosLista] = await Promise.all([rpc('op_padron', { p_municipio_id: null }), rpc('op_municipios')]);
+  const cuenta = (v) => cacheLista.filter((f) => v === 'todos' || (v === 'activos' ? f.activo : v === 'sin' ? f.activo && !f.registrado : !f.activo)).length;
+  const filtros = [['activos', 'En la lista'], ['sin', 'Sin registrarse'], ['fuera', 'Sacados'], ['todos', 'Todos']];
+  const q = busquedaLista.trim().toLowerCase();
+  const lista = cacheLista
+    .filter((f) => filtroLista === 'todos' || (filtroLista === 'activos' ? f.activo : filtroLista === 'sin' ? f.activo && !f.registrado : !f.activo))
+    .filter((f) => !q || [f.nombre, f.apellido, f.cedula, f.telefono, f.placa, f.numero_movil].join(' ').toLowerCase().includes(q));
+
+  const cabeza = `<div class="cabeza">
+    <div class="crece"><h1>Lista oficial</h1>
+      <p>Solo puede registrarse como conductor quien esté en esta lista. Sacar a alguien le corta los viajes de inmediato.</p></div>
+    <input class="campo buscar" id="buscar-lista" type="search" placeholder="Nombre, cédula, placa o móvil" value="${esc(busquedaLista)}" aria-label="Buscar en la lista" />
+    <div class="segmentos" role="group" aria-label="Filtrar la lista">
+      ${filtros.map(([v, tt]) => `<button data-filtro-lista="${v}" aria-pressed="${filtroLista === v}">${tt} <span class="n">${cuenta(v)}</span></button>`).join('')}
+    </div>
+    ${editandoLista ? '' : '<button class="btn fuerte" id="lf-nuevo">Agregar conductor</button>'}</div>`;
+
+  const form = editandoLista ? formularioLista() : '';
+  if (!lista.length) {
+    return cabeza + form + `<div class="marco">${vacio('revisar', q ? `Nadie coincide con “${busquedaLista}”` : 'Esta lista está vacía',
+      q ? 'Busca por nombre, cédula, placa o número de móvil.' : 'Prueba con otro filtro, o agrega un conductor.')}</div>`;
+  }
+  return cabeza + form + `<div class="marco"><div class="tabla-env"><table>
+    <thead><tr><th class="num">Móvil</th><th>Conductor</th><th>Celular</th><th>Placa</th><th>En la app</th><th></th></tr></thead>
+    <tbody>${lista.map((f) => `<tr>
+      <td class="num">${f.numero_movil != null ? `<b class="cifra-fuente" style="font-size:16px">${String(f.numero_movil).padStart(2, '0')}</b>` : `<span class="sub">${f.es_reemplazo ? 'Reemplazo' : '—'}</span>`}</td>
+      <td><div class="nombre">${esc(f.nombre)} ${esc(f.apellido)}</div><div class="sub">C.C. ${esc(f.cedula)}${cacheMunicipiosLista.length > 1 ? ' · ' + esc(f.municipio) : ''}</div></td>
+      <td>${esc(telefonoLegible(f.telefono))}</td>
+      <td>${f.placa ? esc(f.placa) : '<span class="sub">—</span>'}</td>
+      <td>${estadoEnApp(f)}</td>
+      <td><div class="acciones" style="justify-content:flex-end">
+        <button class="btn" data-lf-editar="${f.id}">Corregir</button>
+        ${f.activo
+          ? `<button class="btn peligro" data-lf-sacar="${f.id}" data-nombre="${esc(f.nombre + ' ' + f.apellido)}">Sacar de la lista</button>`
+          : `<button class="btn fuerte" data-lf-poner="${f.id}">Volver a poner</button>`}
+      </div></td>
+    </tr>`).join('')}</tbody></table></div>
+    <div class="pie-tabla"><span>${plural(lista.length, 'persona', 'personas')} en este filtro</span><span>“No se ha registrado” quiere decir que todavía no ha entrado a la app con ese celular, en iPhone ni en Android.</span></div></div>`;
 }
 
 // ============================================================================
@@ -841,7 +935,7 @@ async function hojaMunicipios() {
 // ============================================================================
 // Pintado y eventos
 // ============================================================================
-const HOJAS = { conductores: hojaConductores, viajes: hojaViajes, caja: hojaCaja, seguridad: hojaSeguridad, municipios: hojaMunicipios };
+const HOJAS = { conductores: hojaConductores, lista: hojaLista, viajes: hojaViajes, caja: hojaCaja, seguridad: hojaSeguridad, municipios: hojaMunicipios };
 
 async function pintarHoja() {
   const hoja = document.getElementById('hoja');
@@ -917,6 +1011,52 @@ function conectarHoja() {
   });
   const exp = document.getElementById('exportar');
   if (exp) exp.onclick = exportarCaja;
+
+  // ---- Lista oficial ----
+  document.querySelectorAll('[data-filtro-lista]').forEach((b) => b.onclick = () => { filtroLista = b.dataset.filtroLista; pintarHoja(); });
+  const buscarLista = document.getElementById('buscar-lista');
+  if (buscarLista) buscarLista.oninput = () => {
+    busquedaLista = buscarLista.value;
+    clearTimeout(buscarLista._t);
+    buscarLista._t = setTimeout(async () => { await pintarHoja(); const b = document.getElementById('buscar-lista'); b?.focus(); b?.setSelectionRange(b.value.length, b.value.length); }, 220);
+  };
+  const nuevo = document.getElementById('lf-nuevo');
+  if (nuevo) nuevo.onclick = () => { editandoLista = 'nuevo'; pintarHoja(); };
+  document.querySelectorAll('[data-lf-editar]').forEach((b) => b.onclick = () => { editandoLista = b.dataset.lfEditar; pintarHoja(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  const cancelar = document.getElementById('lf-cancelar');
+  if (cancelar) cancelar.onclick = () => { editandoLista = null; pintarHoja(); };
+  const guardarLista = document.getElementById('lf-guardar');
+  if (guardarLista) guardarLista.onclick = async () => {
+    const v = (id) => document.getElementById('lf-' + id)?.value?.trim() ?? '';
+    const movil = v('movil');
+    const err = document.getElementById('lf-error');
+    guardarLista.disabled = true; err.style.display = 'none';
+    try {
+      await rpc('op_padron_guardar', {
+        p_id: editandoLista === 'nuevo' ? null : editandoLista,
+        p_municipio_id: v('municipio'), p_nombre: v('nombre'), p_apellido: v('apellido'),
+        p_cedula: v('cedula'), p_telefono: v('telefono'), p_placa: v('placa') || null,
+        p_numero_movil: movil === '' ? null : Number(movil),
+        p_es_reemplazo: !!document.getElementById('lf-reemplazo')?.checked,
+      });
+      editandoLista = null;
+      await refrescarTodo();
+    } catch (e) {
+      err.textContent = textoError(e); err.style.display = 'block';
+      guardarLista.disabled = false;
+    }
+  };
+  document.querySelectorAll('[data-lf-sacar]').forEach((b) => b.onclick = async () => {
+    if (!confirm(`¿Sacar a ${b.dataset.nombre} de la lista? Deja de recibir viajes de inmediato y no puede volver a registrarse hasta que lo vuelvan a poner.`)) return;
+    b.disabled = true;
+    try { await rpc('op_padron_activo', { p_id: b.dataset.lfSacar, p_activo: false }); await refrescarTodo(); }
+    catch (e) { alert(textoError(e)); b.disabled = false; }
+  });
+  document.querySelectorAll('[data-lf-poner]').forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    try { await rpc('op_padron_activo', { p_id: b.dataset.lfPoner, p_activo: true }); await refrescarTodo(); }
+    catch (e) { alert(textoError(e)); b.disabled = false; }
+  });
 
   document.querySelectorAll('[data-guardar]').forEach((b) => b.onclick = async () => {
     const fila = b.closest('tr');
@@ -1075,6 +1215,15 @@ function clienteDemo() {
       { tipo: 'compartir', usuario: { nombre: 'Luz Marina Ospina', telefono: '+573116620045' }, contacto_confianza: '+573108852210', municipio: 'Pácora', at: new Date(Date.now() - 5.4e5).toISOString(), ubicacion_conductor: { lat: 5.5262, lng: -75.4597 } },
     ],
     op_municipios: () => [{ id: 'm1', nombre: 'Pácora', departamento: 'Caldas', activo: true, tarifa_base: 2600, tarifa_por_km: 900, puntos: 33, conductores_disponibles: 3, conductores_verificados: 5 }],
+    op_padron: () => [
+      ['p1', 'Jhoiner', 'Galvis', '1053001122', '3104458821', 'TKR412', 3, true, true, 'verificado', true],
+      ['p2', 'Hernán', 'Zapata', '75012233', '3127710046', 'SVM08C', 9, true, true, 'verificado', false],
+      ['p3', 'Jhon Fredy', 'Arias', '1053994411', '3159902114', 'TLX21C', 4, true, false, null, false],
+      ['p4', 'Carlos', 'Restrepo', '1053778899', '3112223344', 'TGB55A', 27, false, true, 'rechazado', false],
+    ].map(([id, nombre, apellido, cedula, tel, placa, movil, activo, reg, est, con]) => ({ id, municipio_id: 'm1', municipio: 'Pácora', nombre, apellido, cedula,
+      telefono: '+57' + tel, placa, numero_movil: movil, es_reemplazo: false, activo, registrado: reg, estado_app: est, conectado: con })),
+    op_padron_guardar: () => ({ id: 'nuevo' }),
+    op_padron_activo: (a) => ({ id: a.p_id, activo: a.p_activo }),
   };
   return {
     rpc: async (n, a) => ({ data: respuestas[n] ? respuestas[n](a ?? {}) : [], error: null }),
