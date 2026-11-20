@@ -149,7 +149,7 @@ a { color: var(--enlace); text-underline-offset: 2px; }
 /* Franja de cifras del día, dentro de la banda */
 .franja {
   max-width: 1480px; margin: 0 auto; padding: 14px 24px 18px;
-  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
 }
 .dato { padding: 2px 18px 0; border-left: 1px solid var(--bosque-3); min-width: 0; }
 .dato:first-child { border-left: 0; padding-left: 0; }
@@ -299,8 +299,8 @@ pre.sql { background: var(--hoja-2); border: 1px solid var(--linea); padding: 12
 
 /* --- Angosto ------------------------------------------------------------- */
 @media (max-width: 1100px) {
-  .franja { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px; }
-  .dato:nth-child(4) { border-left: 0; padding-left: 0; }
+  .franja { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 14px; }
+  .dato:nth-child(5) { border-left: 0; padding-left: 0; }
   .caja-columnas { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
@@ -559,6 +559,8 @@ function armazon() {
       ${datoPlata('Hoy', m.recaudo_hoy, plural(m.viajes_hoy, 'viaje terminado', 'viajes terminados'))}
       ${dato('Alertas SOS', m.sos_hoy, m.sos_hoy > 0 ? 'hoy, revisar en Seguridad' : 'hoy, ninguna', m.sos_hoy > 0 ? 'rojo' : '')}
       ${dato('Sin conductor', m.sin_conductor_hoy, 'pedidos que nadie tomó hoy', m.sin_conductor_hoy > 0 ? 'ojo' : '')}
+      ${dato('Usuarios', m.usuarios, m.usuarios_hoy != null ? `${plural(m.usuarios_hoy, 'nuevo', 'nuevos')} hoy` : 'registrados')}
+      ${m.codigos_hora != null ? dato('Códigos SMS', m.codigos_hora, `en la última hora, de ${numero(m.limite_sms_hora)} posibles`, m.codigos_hora >= m.limite_sms_hora * 0.8 ? 'rojo' : m.codigos_hora >= m.limite_sms_hora * 0.5 ? 'ojo' : '') : ''}
     </div>
   </header>
   <main id="hoja"><div class="cargando">Cargando…</div></main>`;
@@ -1173,7 +1175,7 @@ function clienteDemo() {
     viajes_hoy: vh, recaudo_hoy: rh, viajes_terminados: tot,
   }));
   const metr = { conductores_pendientes: 2, conductores_verificados: 5, conductores_disponibles: 3, viajes_en_curso: 2,
-    viajes_hoy: 25, recaudo_hoy: 85500, sos_hoy: 0, sin_conductor_hoy: 1, usuarios: 412 };
+    viajes_hoy: 25, recaudo_hoy: 85500, sos_hoy: 0, sin_conductor_hoy: 1, usuarios: 412, usuarios_hoy: 37, codigos_hora: 22, limite_sms_hora: 150 };
   const acumulado = ({ p_desde, p_hasta, p_conductor }) => {
     const dias = []; for (let d = p_desde; d <= p_hasta; d = sumarDias(d, 1)) dias.push(d);
     const semilla = (s) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 9973, 7);
